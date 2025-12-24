@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>欢迎访问</title>
+    <style>
+        /* 基础样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        /* 背景设计：柔和渐变 */
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #fce4ec 0%, #e1f5fe 100%);
+            overflow: hidden;
+        }
+
+        /* 容器卡片 */
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px); /* 毛玻璃效果 */
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            width: 90%;
+            max-width: 400px;
+            animation: fadeIn 1s ease-out;
+        }
+
+        h1 {
+            color: #555;
+            margin-bottom: 30px;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        /* 按钮组样式 */
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .btn {
+            text-decoration: none;
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: block;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 按钮一：恋爱ing (粉色调) */
+        .btn-love {
+            background: #ff80ab;
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 128, 171, 0.3);
+        }
+
+        .btn-love:hover {
+            background: #ff4081;
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(255, 128, 171, 0.5);
+        }
+
+        /* 按钮二：oaoa (蓝色调) */
+        .btn-oa {
+            background: #4fc3f7;
+            color: white;
+            box-shadow: 0 4px 15px rgba(79, 195, 247, 0.3);
+        }
+
+        .btn-oa:hover {
+            background: #29b6f6;
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(79, 195, 247, 0.5);
+        }
+
+        /* 激活时的缩放效果 */
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        /* 入场动画 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 响应式微调 */
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>请选择入口</h1>
+        
+        <div class="button-group">
+            <a href="./恋爱ing.html" class="btn btn-love">💕 恋爱ing</a>
+            <a href="./oaoa.html" class="btn btn-oa">🌟 oaoa</a>
+        </div>
+    </div>
+
+</body>
+</html>
