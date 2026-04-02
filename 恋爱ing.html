@@ -7,7 +7,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Tinos:ital@0;1&display=swap" rel="stylesheet">
-    <script src="./libs/tasks-vision.js"></script>
     
     <style>
         :root {
@@ -360,6 +359,8 @@
     <script type="module">
         // 导入Three.js ES模块
         import * as THREE from './libs/three.module.js';
+        // 导入MediaPipe视觉任务模块
+        import { FilesetResolver, HandLandmarker } from './libs/tasks-vision.js';
         
         // 配置常量
         const CONFIG = {
@@ -370,9 +371,6 @@
             cameraZ: 40,
             colorBoost: 1.0 
         };
-
-        // 声明全局变量
-        let FilesetResolver, HandLandmarker;
         let scene, camera, renderer, particles, geometry;
         let snowSystem, snowGeo, bgStarSystem; // 雪花系统 & 背景星空
         let galaxySystem, galaxyGroup; // 银河星云系统
@@ -395,10 +393,8 @@
 
         // 加载核心库
         async function loadLibraries() {
-            // tasks-vision.js 已作为全局脚本加载
-            // 从全局对象中获取 FilesetResolver 和 HandLandmarker
-            FilesetResolver = self.FilesetResolver;
-            HandLandmarker = self.HandLandmarker;
+            // FilesetResolver 和 HandLandmarker 已通过ES模块导入
+            // 此函数保留以保持代码结构一致性
         }
 
         // UI 初始化
@@ -993,159 +989,175 @@
                 const localBaseUrl = "./libs/";
                 const localModelPath = "./libs/hand_landmarker.task";
                 
-                let vision;
-                
-                // 使用本地WASM文件
-                vision = await FilesetResolver.forVisionTasks(localBaseUrl);
-                
-                // 使用本地模型
-                handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                    baseOptions: { modelAssetPath: localModelPath, delegate: "GPU" },
-                    runningMode: "VIDEO", numHands: 1
+                // 使用FilesetResolver正确初始化HandLandmarker
+                const filesetResolver = await FilesetResolver.forVisionTasks(localBaseUrl);
+                handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
+                    baseOptions: {
+                        modelAssetPath: localModelPath,
+                        delegate: "GPU"
+                    },
+                    runningMode: "VIDEO",
+                    numHands: 1
                 });
                 
                 webcam = document.getElementById('webcam');
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: 320, 
+                        height: 240,
+                        facingMode: 'user' // 明确指定使用前置摄像头
+                    } 
+                });
                 webcam.srcObject = stream;
-                webcam.onloadeddata = () => { document.getElementById('loader').style.display = 'none'; predict(); };
-            } catch (e) { document.getElementById('loader').innerText = "CAMERA ERROR"; }
+                webcam.onloadeddata = () => { 
+                    document.getElementById('loader').style.display = 'none'; 
+                    predict(); 
+                };
+            } catch (e) { 
+                console.error("摄像头初始化失败:", e);
+                document.getElementById('loader').innerText = "摄像头初始化失败: " + e.message; 
+            }
         }
 
         function predict() {
             const now = performance.now();
-            if (handLandmarker && webcam.readyState >= 2) {
-                const results = handLandmarker.detectForVideo(webcam, now);
-                if (results.landmarks.length > 0) {
-                    const lm = results.landmarks[0];
-                    const indexUp = lm[8].y < lm[6].y, midUp = lm[12].y < lm[10].y, 
-                          ringUp = lm[16].y < lm[14].y, pinkyUp = lm[20].y < lm[18].y;
-                    
-                    // Thumb extended check: Distance from tip to pinky base vs IP to pinky base
-                    const thumbExtended = Math.hypot(lm[4].x - lm[17].x, lm[4].y - lm[17].y) > 
-                                          Math.hypot(lm[2].x - lm[17].x, lm[2].y - lm[17].y) * 1.2;
+            if (handLandmarker && webcam && webcam.readyState >= 2) {
+                try {
+                    const results = handLandmarker.detectForVideo(webcam, now);
+                    if (results && results.landmarks && results.landmarks.length > 0) {
+                        const lm = results.landmarks[0];
+                        const indexUp = lm[8].y < lm[6].y, midUp = lm[12].y < lm[10].y, 
+                              ringUp = lm[16].y < lm[14].y, pinkyUp = lm[20].y < lm[18].y;
+                        
+                        // Thumb extended check: Distance from tip to pinky base vs IP to pinky base
+                        const thumbExtended = Math.hypot(lm[4].x - lm[17].x, lm[4].y - lm[17].y) > 
+                                              Math.hypot(lm[2].x - lm[17].x, lm[2].y - lm[17].y) * 1.2;
 
-                    const count = [indexUp, midUp, ringUp, pinkyUp].filter(Boolean).length;
+                        const count = [indexUp, midUp, ringUp, pinkyUp].filter(Boolean).length;
 
-                    let g = "";
-                    let currentSource = ""; // 当前帧的触发源
+                        let g = "";
+                        let currentSource = ""; // 当前帧的触发源
 
-                    // 识别“我爱你”手势：大拇指、食指、小指伸出，中指无名指弯曲
-                    if (indexUp && pinkyUp && !midUp && !ringUp && thumbExtended) {
-                        g = "LOVE";
-                    } 
-                    // E: 中指、无名指、小指伸直 (Index closed)
-                    else if (!indexUp && midUp && ringUp && pinkyUp) {
-                        g = "E";
-                    }
-                    // L: 拇指和食指伸直 (Others closed)
-                    else if (indexUp && !midUp && !ringUp && !pinkyUp && thumbExtended) {
-                        g = "L";
-                    }
-                    // 3: 食指、中指、无名指伸直 -> E
-                    else if (indexUp && midUp && ringUp && !pinkyUp) {
-                        g = "E";
-                    }
-                    // V (原2): 食指、中指伸直
-                    else if (indexUp && midUp && count === 2) {
-                        g = "V";
-                    }
-                    // 1: 仅食指伸直 -> BOBO
-                    else if (indexUp && count === 1) {
-                        g = "BOBO";
-                        currentSource = "index";
-                    }
-                    // 0 fingers up: Fist or Thumbs Up
-                    else if (count === 0) {
-                        if (thumbExtended) {
-                             g = "BOBO"; // 竖起大拇指 -> BOBO图像
-                             currentSource = "thumb";
+                        // 识别“我爱你”手势：大拇指、食指、小指伸出，中指无名指弯曲
+                        if (indexUp && pinkyUp && !midUp && !ringUp && thumbExtended) {
+                            g = "LOVE";
+                        } 
+                        // E: 中指、无名指、小指伸直 (Index closed)
+                        else if (!indexUp && midUp && ringUp && pinkyUp) {
+                            g = "E";
                         }
-                        else g = "O";                  // 握拳 -> O字母
-                    }
-                    // 4 fingers up
-                    else if (count === 4) {
-                        g = "SCATTER";
-                    }
+                        // L: 拇指和食指伸直 (Others closed)
+                        else if (indexUp && !midUp && !ringUp && !pinkyUp && thumbExtended) {
+                            g = "L";
+                        }
+                        // 3: 食指、中指、无名指伸直 -> E
+                        else if (indexUp && midUp && ringUp && !pinkyUp) {
+                            g = "E";
+                        }
+                        // V (原2): 食指、中指伸直
+                        else if (indexUp && midUp && count === 2) {
+                            g = "V";
+                        }
+                        // 1: 仅食指伸直 -> BOBO
+                        else if (indexUp && count === 1) {
+                            g = "BOBO";
+                            currentSource = "index";
+                        }
+                        // 0 fingers up: Fist or Thumbs Up
+                        else if (count === 0) {
+                            if (thumbExtended) {
+                                 g = "BOBO"; // 竖起大拇指 -> BOBO图像
+                                 currentSource = "thumb";
+                            }
+                            else g = "O";                  // 握拳 -> O字母
+                        }
+                        // 4 fingers up
+                        else if (count === 4) {
+                            g = "SCATTER";
+                        }
 
-                    // 拳头跟随逻辑：当检测到BOBO时，计算手部位置
-                    if (g === "BOBO") {
-                        // 只有食指触发的BOBO才跟随移动，大拇指触发的（像初始界面一样）保持居中
-                        if (currentSource === 'index') {
-                            // lm[9] 是中指指根，作为手部中心点
-                            // 屏幕Y坐标 0(上) -> 1(下) => 3D Y: 正 -> 负
-                            // 屏幕X坐标 0(左) -> 1(右) => 3D X: 负 -> 正 (注意镜像)
-                            // 移动幅度放大系数设为60 (Y) 和 80 (X)
-                            targetGroupY = (0.5 - lm[9].y) * 60;
-                            targetGroupX = (0.5 - lm[9].x) * 80; // 镜像翻转：手往右移(画面左侧x<0.5) -> 物体往右(x>0)
+                        // 拳头跟随逻辑：当检测到BOBO时，计算手部位置
+                        if (g === "BOBO") {
+                            // 只有食指触发的BOBO才跟随移动，大拇指触发的（像初始界面一样）保持居中
+                            if (currentSource === 'index') {
+                                // lm[9] 是中指指根，作为手部中心点
+                                // 屏幕Y坐标 0(上) -> 1(下) => 3D Y: 正 -> 负
+                                // 屏幕X坐标 0(左) -> 1(右) => 3D X: 负 -> 正 (注意镜像)
+                                // 移动幅度放大系数设为60 (Y) 和 80 (X)
+                                targetGroupY = (0.5 - lm[9].y) * 60;
+                                targetGroupX = (0.5 - lm[9].x) * 80; // 镜像翻转：手往右移(画面左侧x<0.5) -> 物体往右(x>0)
+                            } else {
+                                // 大拇指BOBO，居中（模拟初始效果）
+                                targetGroupY = 0;
+                                targetGroupX = 0;
+                            }
                         } else {
-                            // 大拇指BOBO，居中（模拟初始效果）
                             targetGroupY = 0;
                             targetGroupX = 0;
                         }
-                    } else {
-                        targetGroupY = 0;
-                        targetGroupX = 0;
-                    }
 
-                    if (g && g !== lastGesture) {
-                        if (g === 'BOBO') {
-                            boboStartTime = Date.now();
-                            boboSource = currentSource;
-                            if (currentSource === 'index') {
-                                carStartTime = Date.now(); // 开始汽车计时
-                                carArrivalTime = 0; // 重置到达时间
+                        if (g && g !== lastGesture) {
+                            if (g === 'BOBO') {
+                                boboStartTime = Date.now();
+                                boboSource = currentSource;
+                                if (currentSource === 'index') {
+                                    carStartTime = Date.now(); // 开始汽车计时
+                                    carArrivalTime = 0; // 重置到达时间
+                                }
+                            } else {
+                                boboSource = ''; // Reset source
                             }
+                            lastGesture = g; updateShape(g);
+                        } else if (g === 'BOBO' && lastGesture === 'BOBO') {
+                            // 即使手势没变，如果触发源变了（比如从大拇指变成食指）
+                            if (currentSource !== boboSource) {
+                                boboSource = currentSource;
+                                if (currentSource === 'index') {
+                                    carStartTime = Date.now(); // 重新开始汽车计时
+                                    carArrivalTime = 0; // 重置到达时间
+                                }
+                            }
+                        }
+                        
+                        // LOVE手势距离缩放逻辑
+                        if (g === 'LOVE') {
+                            // 计算手掌大小（腕部到中指根部的距离），作为距离的近似值
+                            // 距离越近，handSize越大；距离越远，handSize越小
+                            const handSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y);
+                            
+                            // 估算可视区域宽度
+                            const vFOV = camera.fov * Math.PI / 180;
+                            const visibleHeight = 2 * Math.tan(vFOV / 2) * camera.position.z;
+                            const visibleWidth = visibleHeight * camera.aspect;
+                            
+                            // "LOVE"文字在3D空间中的原始大致宽度 (假设约为40单位)
+                            const textBaseWidth = 40;
+                            
+                            // 最小宽度要求：屏幕宽度的1/3
+                            const minWidth = visibleWidth / 3;
+                            const minScale = minWidth / textBaseWidth;
+                            
+                            // 映射逻辑：
+                            // 手很近 (handSize ~ 0.4) -> 缩放最小 (minScale)
+                            // 手很远 (handSize ~ 0.05) -> 缩放最大 (例如 2.0)
+                            
+                            const farSize = 0.05;
+                            const nearSize = 0.4;
+                            const maxScale = 2.0;
+                            
+                            // 归一化 handSize (0..1)
+                            let t = (handSize - farSize) / (nearSize - farSize);
+                            t = Math.max(0, Math.min(1, t)); // Clamp to 0-1
+                            
+                            // 线性插值: t=0 -> maxScale, t=1 -> minScale
+                            targetLoveScale = maxScale * (1 - t) + minScale * t;
                         } else {
-                            boboSource = ''; // Reset source
-                        }
-                        lastGesture = g; updateShape(g);
-                    } else if (g === 'BOBO' && lastGesture === 'BOBO') {
-                        // 即使手势没变，如果触发源变了（比如从大拇指变成食指）
-                        if (currentSource !== boboSource) {
-                            boboSource = currentSource;
-                            if (currentSource === 'index') {
-                                carStartTime = Date.now(); // 重新开始汽车计时
-                                carArrivalTime = 0; // 重置到达时间
-                            }
+                            // 重置为默认
+                            targetLoveScale = 1.0;
                         }
                     }
-                    
-                    // LOVE手势距离缩放逻辑
-                    if (g === 'LOVE') {
-                        // 计算手掌大小（腕部到中指根部的距离），作为距离的近似值
-                        // 距离越近，handSize越大；距离越远，handSize越小
-                        const handSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y);
-                        
-                        // 估算可视区域宽度
-                        const vFOV = camera.fov * Math.PI / 180;
-                        const visibleHeight = 2 * Math.tan(vFOV / 2) * camera.position.z;
-                        const visibleWidth = visibleHeight * camera.aspect;
-                        
-                        // "LOVE"文字在3D空间中的原始大致宽度 (假设约为40单位)
-                        const textBaseWidth = 40;
-                        
-                        // 最小宽度要求：屏幕宽度的1/3
-                        const minWidth = visibleWidth / 3;
-                        const minScale = minWidth / textBaseWidth;
-                        
-                        // 映射逻辑：
-                        // 手很近 (handSize ~ 0.4) -> 缩放最小 (minScale)
-                        // 手很远 (handSize ~ 0.05) -> 缩放最大 (例如 2.0)
-                        
-                        const farSize = 0.05;
-                        const nearSize = 0.4;
-                        const maxScale = 2.0;
-                        
-                        // 归一化 handSize (0..1)
-                        let t = (handSize - farSize) / (nearSize - farSize);
-                        t = Math.max(0, Math.min(1, t)); // Clamp to 0-1
-                        
-                        // 线性插值: t=0 -> maxScale, t=1 -> minScale
-                        targetLoveScale = maxScale * (1 - t) + minScale * t;
-                    } else {
-                        // 重置为默认
-                        targetLoveScale = 1.0;
-                    }
+                } catch (e) {
+                    console.error("手势识别失败:", e);
                 }
             }
             requestAnimationFrame(predict);
@@ -1366,10 +1378,10 @@
                 await loadLibraries();
                 // 初始化Three.js场景
                 initThree();
-                // 初始化视觉引擎
-                initVision();
                 // 启动动画循环
                 animate();
+                // 初始化视觉引擎（必须在动画循环之后，因为可能失败但不影响主程序）
+                await initVision();
             } catch (error) {
                 console.error("程序启动失败:", error);
                 document.getElementById('loader').innerText = "程序启动失败，请刷新页面重试";
