@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Tinos:ital@0;1&display=swap" rel="stylesheet">
+    <script src="./libs/tasks-vision.js"></script>
     
     <style>
         :root {
@@ -185,8 +186,33 @@
             z-index: 20;
             pointer-events: auto;
         }
-        
+
         .help-btn:hover {
+            background: rgba(212, 175, 55, 0.1);
+            border-color: var(--gold-color);
+        }
+
+        /* 回到首页按钮 */
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            right: 100px;
+            background: transparent;
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            color: var(--gold-color);
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            transition: all 0.3s;
+            z-index: 20;
+            pointer-events: auto;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .home-btn:hover {
             background: rgba(212, 175, 55, 0.1);
             border-color: var(--gold-color);
         }
@@ -233,6 +259,7 @@
             </div>
             <button class="cam-toggle-btn" id="toggle-cam">显示摄像头</button>
         </div>
+        <a href="./index.html" class="home-btn">回到首页</a>
         <button class="help-btn" id="help-btn">使用说明</button>
     </div>
     
@@ -331,6 +358,9 @@
     </div>
 
     <script type="module">
+        // 导入Three.js ES模块
+        import * as THREE from './libs/three.module.js';
+        
         // 配置常量
         const CONFIG = {
             particleCount: 35000, 
@@ -342,7 +372,7 @@
         };
 
         // 声明全局变量
-        let THREE, FilesetResolver, HandLandmarker;
+        let FilesetResolver, HandLandmarker;
         let scene, camera, renderer, particles, geometry;
         let snowSystem, snowGeo, bgStarSystem; // 雪花系统 & 背景星空
         let galaxySystem, galaxyGroup; // 银河星云系统
@@ -363,28 +393,12 @@
         let carMesh; // 汽车模型
         let carArrivalTime = 0; // 汽车到达中间的时间
 
-        // 动态加载核心库
+        // 加载核心库
         async function loadLibraries() {
-            const cloudThreeUrl = "https://scrm-community.oss-cn-shenzhen.aliyuncs.com/miniso-vendor/20251226-723991-c490b1bac7374e3aba4915bfd6c1fe6d.js";
-            const localThreeUrl = './libs/three.module.js';
-            const tasksVisionUrl = './libs/tasks-vision.js';
-            
-            try {
-                // 先尝试从云端加载three.module.js
-                const threeModule = await import(cloudThreeUrl);
-                THREE = threeModule;
-                console.log("云端three.js加载成功");
-            } catch (threeError) {
-                // 云端加载失败，尝试使用本地three.module.js
-                console.warn("云端three.js加载失败，尝试使用本地three.module.js:", threeError);
-                const threeModule = await import(localThreeUrl);
-                THREE = threeModule;
-            }
-            
-            // 加载tasks-vision.js
-            const visionModule = await import(tasksVisionUrl);
-            FilesetResolver = visionModule.FilesetResolver;
-            HandLandmarker = visionModule.HandLandmarker;
+            // tasks-vision.js 已作为全局脚本加载
+            // 从全局对象中获取 FilesetResolver 和 HandLandmarker
+            FilesetResolver = self.FilesetResolver;
+            HandLandmarker = self.HandLandmarker;
         }
 
         // UI 初始化
@@ -976,30 +990,19 @@
 
         async function initVision() {
             try {
-                const cloudWasmBaseUrl = "https://scrm-community.oss-cn-shenzhen.aliyuncs.com/miniso-vendor/20251226-191578-1dbb5e5cdca343bba6fffd0055ca2d68.wasm";
                 const localBaseUrl = "./libs/";
-                const cloudModelUrl = "https://scrm-community.oss-cn-shenzhen.aliyuncs.com/miniso-vendor/20251226-156688-fb57ad632e7043dcae63250aa5e87277.task";
                 const localModelPath = "./libs/hand_landmarker.task";
                 
                 let vision;
                 
-                // 直接使用本地WASM文件，避免云端加载路径错误
+                // 使用本地WASM文件
                 vision = await FilesetResolver.forVisionTasks(localBaseUrl);
                 
-                // 先尝试从云端加载模型
-                try {
-                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                        baseOptions: { modelAssetPath: cloudModelUrl, delegate: "GPU" },
-                        runningMode: "VIDEO", numHands: 1
-                    });
-                } catch (cloudError) {
-                    // 云端加载失败，尝试使用本地模型
-                    console.warn("云端模型加载失败，尝试使用本地模型:", cloudError);
-                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                        baseOptions: { modelAssetPath: localModelPath, delegate: "GPU" },
-                        runningMode: "VIDEO", numHands: 1
-                    });
-                }
+                // 使用本地模型
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                    baseOptions: { modelAssetPath: localModelPath, delegate: "GPU" },
+                    runningMode: "VIDEO", numHands: 1
+                });
                 
                 webcam = document.getElementById('webcam');
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
